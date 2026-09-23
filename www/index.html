@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>BVTV AI - Chẩn đoán sâu bệnh & đề xuất thuốc</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#166534">
+<link rel="icon" href="icons/icon-192.png">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  #cameraInput { display:none; }
+</style>
+</head>
+<body class="bg-gray-50 font-sans min-h-screen pb-10">
+
+<div class="max-w-2xl mx-auto p-4">
+
+  <div class="flex items-center justify-between border-b pb-4 mb-5">
+    <div>
+      <h1 class="text-xl font-bold text-green-800">🌾 BVTV AI</h1>
+      <p class="text-xs text-gray-500">Chụp ảnh cây → AI đề xuất thuốc & phân bón</p>
+    </div>
+    <a href="https://timonblue113.github.io/POSTBVTV/tracuu.html" target="_blank"
+       class="text-xs bg-indigo-600 text-white px-3 py-2 rounded-lg font-semibold hover:bg-indigo-700">
+      📖 Từ điển
+    </a>
+  </div>
+
+  <!-- BƯỚC 1: ẢNH -->
+  <div class="bg-white rounded-xl shadow-sm border p-4 mb-4">
+    <label class="block text-sm font-semibold text-gray-700 mb-2">1. Ảnh cây / lá / bông bị bệnh</label>
+    <div id="previewBox" class="w-full h-56 bg-gray-100 rounded-lg flex items-center justify-center overflow-hidden mb-3 border border-dashed">
+      <span id="previewPlaceholder" class="text-gray-400 text-sm">Chưa có ảnh</span>
+      <img id="previewImg" class="hidden w-full h-full object-cover">
+    </div>
+    <input type="file" id="cameraInput" accept="image/*" capture="environment">
+    <div class="grid grid-cols-2 gap-3">
+      <button onclick="document.getElementById('cameraInput').click()"
+        class="bg-green-700 text-white py-3 rounded-lg font-bold text-sm hover:bg-green-800">📷 Chụp ảnh</button>
+      <button onclick="pickFromGallery()"
+        class="bg-gray-200 text-gray-800 py-3 rounded-lg font-bold text-sm hover:bg-gray-300">🖼️ Chọn từ thư viện</button>
+    </div>
+  </div>
+
+  <!-- BƯỚC 2: THÔNG TIN -->
+  <div class="bg-white rounded-xl shadow-sm border p-4 mb-4">
+    <label class="block text-sm font-semibold text-gray-700 mb-2">2. Loại cây trồng</label>
+    <select id="cropType" class="w-full border-2 border-gray-200 p-3 rounded-lg mb-3 focus:outline-none focus:border-green-600">
+      <option value="">-- Để AI tự nhận diện --</option>
+      <option>Lúa</option>
+      <option>Ớt</option>
+      <option>Cà chua</option>
+      <option>Dưa leo</option>
+      <option>Bắp (ngô)</option>
+      <option>Đậu bắp</option>
+      <option>Đậu phộng</option>
+      <option>Khoai lang</option>
+      <option>Rau ăn lá (cải, xà lách...)</option>
+      <option>Xoài</option>
+      <option>Sầu riêng</option>
+      <option value="__other">Khác (nhập tay)</option>
+    </select>
+    <input type="text" id="cropTypeOther" placeholder="Nhập tên cây trồng..." class="w-full border-2 border-gray-200 p-3 rounded-lg mb-3 hidden">
+
+    <label class="block text-sm font-semibold text-gray-700 mb-2">3. Giai đoạn sinh trưởng</label>
+    <select id="growthStage" class="w-full border-2 border-gray-200 p-3 rounded-lg mb-3 focus:outline-none focus:border-green-600">
+      <option value="">-- Để AI tự đoán --</option>
+      <option>Cây con / mới gieo sạ</option>
+      <option>Đẻ nhánh / sinh trưởng thân lá</option>
+      <option>Làm đòng / ra hoa</option>
+      <option>Trổ bông / đậu trái</option>
+      <option>Nuôi trái / vào chắc</option>
+      <option>Gần thu hoạch / chín</option>
+    </select>
+
+    <label class="block text-sm font-semibold text-gray-700 mb-2">4. Ghi chú thêm (tuỳ chọn)</label>
+    <textarea id="note" rows="2" placeholder="VD: lá vàng từ gốc lên, ruộng bị đọng nước..." class="w-full border-2 border-gray-200 p-3 rounded-lg"></textarea>
+  </div>
+
+  <button id="analyzeBtn" onclick="analyze()"
+    class="w-full bg-indigo-700 text-white py-4 rounded-xl font-bold text-lg hover:bg-indigo-800 disabled:opacity-50">
+    🔬 Phân tích & Đề xuất
+  </button>
+
+  <div id="loadingBox" class="hidden mt-4 text-center text-indigo-700 font-semibold">
+    ⏳ Đang phân tích ảnh, vui lòng chờ...
+  </div>
+
+  <div id="errorBox" class="hidden mt-4 bg-red-50 border border-red-300 text-red-700 p-4 rounded-lg text-sm"></div>
+
+  <!-- KẾT QUẢ -->
+  <div id="resultBox" class="hidden mt-5 bg-white rounded-xl shadow-sm border p-4">
+    <h2 class="text-lg font-bold text-green-800 mb-3">📋 Kết quả chẩn đoán</h2>
+    <div id="resultContent" class="space-y-2 text-sm"></div>
+
+    <h3 class="text-md font-bold text-indigo-800 mt-5 mb-2">💊 Thuốc phù hợp trong danh mục của bạn</h3>
+    <div id="productList" class="border rounded-lg overflow-y-auto max-h-72 custom-scrollbar"></div>
+
+    <p class="text-xs text-gray-400 mt-4 leading-relaxed">
+      ⚠️ Đây là gợi ý tự động từ AI, chỉ mang tính tham khảo. Vui lòng đọc kỹ nhãn thuốc,
+      tuân thủ liều lượng - thời gian cách ly, và đối chiếu với cán bộ/đại lý BVTV
+      trước khi sử dụng, đặc biệt với các trường hợp nặng hoặc chưa chắc chắn.
+    </p>
+  </div>
+
+  <div class="mt-6 text-center">
+    <button onclick="showSettings()" class="text-xs text-gray-400 underline">Cài đặt địa chỉ máy chủ AI</button>
+  </div>
+</div>
+
+<script>
+// ==== CẤU HÌNH ====
+// Sau khi deploy Cloudflare Worker (xem README), dán URL worker vào đây
+// hoặc nhấn "Cài đặt địa chỉ máy chủ AI" bên dưới để nhập ngay trên app.
+const DEFAULT_WORKER_URL = "https://postbvtv-ai-proxy.YOUR-SUBDOMAIN.workers.dev";
+
+function getWorkerUrl() {
+  return localStorage.getItem("worker_url") || DEFAULT_WORKER_URL;
+}
+function showSettings() {
+  const current = getWorkerUrl();
+  const url = prompt("Nhập URL Cloudflare Worker của bạn:", current);
+  if (url) { localStorage.setItem("worker_url", url.trim()); alert("Đã lưu!"); }
+}
+
+// ==== ẢNH (tự resize/nén trước khi gửi để tăng tốc phân tích) ====
+let imageBase64 = null, imageMime = null;
+const cameraInput = document.getElementById("cameraInput");
+cameraInput.addEventListener("change", handleFile);
+function pickFromGallery() {
+  cameraInput.removeAttribute("capture");
+  cameraInput.click();
+}
+
+function resizeImage(file, maxDim = 1280, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxDim) { height = Math.round(height * (maxDim / width)); width = maxDim; }
+        else if (height > maxDim) { width = Math.round(width * (maxDim / height)); height = maxDim; }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById("previewPlaceholder").textContent = "Đang xử lý ảnh...";
+  document.getElementById("previewPlaceholder").classList.remove("hidden");
+  document.getElementById("previewImg").classList.add("hidden");
+  try {
+    const dataUrl = await resizeImage(file); // luôn nén thành JPEG nhẹ, nhanh hơn nhiều khi upload + AI xử lý
+    imageMime = "image/jpeg";
+    imageBase64 = dataUrl.split(",")[1];
+    document.getElementById("previewImg").src = dataUrl;
+    document.getElementById("previewImg").classList.remove("hidden");
+    document.getElementById("previewPlaceholder").classList.add("hidden");
+  } catch (err) {
+    document.getElementById("previewPlaceholder").textContent = "Không đọc được ảnh, thử lại.";
+  }
+}
+
+// ==== CÂY TRỒNG "KHÁC" ====
+const cropSelect = document.getElementById("cropType");
+const cropOther = document.getElementById("cropTypeOther");
+cropSelect.addEventListener("change", () => {
+  cropOther.classList.toggle("hidden", cropSelect.value !== "__other");
+});
+function getCropType() {
+  return cropSelect.value === "__other" ? cropOther.value.trim() : cropSelect.value;
+}
+
+// ==== GỌI AI ====
+async function analyze() {
+  const errorBox = document.getElementById("errorBox");
+  const resultBox = document.getElementById("resultBox");
+  errorBox.classList.add("hidden");
+  resultBox.classList.add("hidden");
+
+  if (!imageBase64) {
+    errorBox.textContent = "Vui lòng chụp hoặc chọn một tấm ảnh trước.";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+
+  const btn = document.getElementById("analyzeBtn");
+  btn.disabled = true;
+  document.getElementById("loadingBox").classList.remove("hidden");
+
+  try {
+    const res = await fetch(getWorkerUrl(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image: imageBase64,
+        mimeType: imageMime,
+        cropType: getCropType(),
+        growthStage: document.getElementById("growthStage").value,
+        note: document.getElementById("note").value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || "Lỗi máy chủ AI");
+    renderResult(data.analysis, data.products || []);
+  } catch (err) {
+    errorBox.textContent = "❌ " + err.message + "\n\n(Kiểm tra lại URL Cloudflare Worker trong mục Cài đặt bên dưới nếu chưa cấu hình)";
+    errorBox.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    document.getElementById("loadingBox").classList.add("hidden");
+  }
+}
+
+function renderResult(a, products) {
+  const badge = (text, color) => `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-${color}-100 text-${color}-700">${text}</span>`;
+  const sevColor = { "nhẹ": "green", "trung bình": "yellow", "nặng": "red" }[a.severity] || "gray";
+  const confColor = { "cao": "green", "trung bình": "yellow", "thấp": "red" }[a.confidence] || "gray";
+
+  document.getElementById("resultContent").innerHTML = `
+    <div><b>Cây trồng:</b> ${a.crop || "-"}</div>
+    <div><b>Giai đoạn:</b> ${a.growth_stage || "-"}</div>
+    <div><b>Chẩn đoán:</b> <span class="font-bold text-red-700">${a.diagnosis || "-"}</span>
+      ${badge("Độ tin cậy: " + (a.confidence||"?"), confColor)} ${badge("Mức độ: " + (a.severity||"?"), sevColor)}</div>
+    <div><b>Triệu chứng:</b> ${a.symptoms || "-"}</div>
+    <div><b>Hoạt chất đề xuất:</b> ${(a.recommended_active_ingredients||[]).join(", ") || "-"}</div>
+    <div class="bg-green-50 p-2 rounded-lg"><b>🌱 Phân bón:</b> ${a.fertilizer_advice || "-"}</div>
+    <div class="bg-yellow-50 p-2 rounded-lg"><b>⏰ Thời điểm xịt:</b> ${a.spray_timing_advice || "-"}</div>
+    ${a.warnings ? `<div class="bg-red-50 text-red-700 p-2 rounded-lg"><b>⚠️ Lưu ý:</b> ${a.warnings}</div>` : ""}
+  `;
+
+  const listEl = document.getElementById("productList");
+  if (!products.length) {
+    listEl.innerHTML = `<div class="p-4 text-center text-gray-400 text-sm">Không tìm thấy thuốc khớp trong danh mục của bạn cho hoạt chất trên. Hãy tra thủ công trong "Từ điển" ở góc trên.</div>`;
+  } else {
+    listEl.innerHTML = `<table class="w-full text-left text-xs">
+      <thead class="bg-indigo-50 sticky top-0"><tr>
+        <th class="p-2 border-b">Tên thuốc</th><th class="p-2 border-b">Hoạt chất</th>
+        <th class="p-2 border-b">Phân nhóm</th><th class="p-2 border-b">Công ty</th></tr></thead>
+      <tbody>${products.map(p => `<tr class="border-b">
+        <td class="p-2 font-semibold">${p["Tên thuốc"]||""}</td>
+        <td class="p-2">${p["Hoạt chất"]||""}</td>
+        <td class="p-2">${p["Phân nhóm"]||""}</td>
+        <td class="p-2">${p["Công ty"]||""}</td></tr>`).join("")}</tbody>
+    </table>`;
+  }
+
+  document.getElementById("resultBox").classList.remove("hidden");
+  document.getElementById("resultBox").scrollIntoView({ behavior: "smooth" });
+}
+
+// PWA service worker (để app cài đặt được / build APK bằng PWABuilder)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+</script>
+</body>
+</html>

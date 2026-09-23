@@ -1,0 +1,67 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # ubuntu-latest của GitHub Actions đã có sẵn Android SDK (platform 34,
+      # build-tools, licenses đã accept sẵn) tại $ANDROID_HOME - không cần
+      # cài lại qua action riêng (hay gây lỗi sdkmanager không tương thích JDK mới).
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync Capacitor (copy www/ vào android project)
+        run: npx cap sync android
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK cho dễ nhận biết
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist/BVTV-AI.apk
+
+      # Tải APK ở tab Actions -> chọn lần chạy mới nhất -> mục Artifacts
+      - name: Upload APK as build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BVTV-AI-apk
+          path: dist/BVTV-AI.apk
+
+      # Ngoài ra tạo/luôn cập nhật một bản Release "latest" để có link tải cố định
+      - name: Publish/Update GitHub Release "latest"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "BVTV AI - bản build mới nhất"
+          body: "APK được build tự động từ commit ${{ github.sha }}. Tải file BVTV-AI.apk bên dưới, cài trực tiếp lên điện thoại Android."
+          files: dist/BVTV-AI.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
